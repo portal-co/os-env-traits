@@ -1,0 +1,15 @@
+[package]
+name        = "env-real"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Real (production) implementations of env-traits: OsFileEnv, ProcessGitEnv, GhCliGitHubEnv, ReqwestNetworkEnv"
+
+[dependencies]
+env-traits = { workspace = true }
+anyhow     = { workspace = true }
+reqwest    = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+walkdir    = { workspace = true }

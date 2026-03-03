@@ -1,0 +1,11 @@
+[package]
+name        = "env-fake"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "In-memory fake implementations of env-traits for hermetic unit tests"
+
+[dependencies]
+env-traits = { workspace = true }
+anyhow     = { workspace = true }

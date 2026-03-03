@@ -1,0 +1,1 @@
+{"description":"Pluggable OS-level environment traits for Rust: FileEnv, GitEnv, GitHubEnv, NetworkEnv, AiEnv — with in-memory fakes for hermetic testing","devDependencies":{"zshy":"^0.7.0"},"name":"@portal-solutions/os-env-traits","type":"module","workspaces":[]}
