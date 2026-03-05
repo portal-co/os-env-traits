@@ -121,7 +121,7 @@ where
         root: &str,
     ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), E::Error>> + '_>, E::Error> {
         // The async walk already collected the full listing into a Vec.
-        let entries = block_on!(self.awaiter, self.env.walk(root))?;
+        let mut entries = block_on!(self.awaiter, self.env.walk(root))?;
         Ok(Box::new(core::iter::from_fn(move || {
             block_on!(self.awaiter, entries.next()).transpose()
         })))
