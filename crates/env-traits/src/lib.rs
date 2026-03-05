@@ -34,6 +34,12 @@ pub use async_::{
     AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv,
 };
 
+pub mod copy_ext;
+pub use copy_ext::{
+    AsyncFileEnvCopyExt, AsyncFileEnvCopyToSyncExt, CopyError, FileEnvCopyExt,
+    FileEnvCopyToAsyncExt,
+};
+
 #[cfg(feature = "awaiter")]
 pub mod awaiter_bridge;
 #[cfg(feature = "awaiter")]
