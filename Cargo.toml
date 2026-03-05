@@ -3,6 +3,7 @@ members = [
   "crates/env-traits",
   "crates/env-fake",
   "crates/env-real",
+  "crates/ftree",
 ]
 resolver = "2"
 
@@ -15,9 +16,10 @@ repository  = "https://github.com/portal-co/os-env-traits"
 [workspace.dependencies]
 anyhow     = "1"
 reqwest    = { version = "0.12", features = ["json", "blocking"] }
-serde      = { version = "1", features = ["derive"] }
+serde      = { version = "1", features = ["derive"], default-features = false}
 serde_json = "1"
 walkdir    = "2"
 env-traits = { path = "crates/env-traits" }
 env-fake   = { path = "crates/env-fake" }
 env-real   = { path = "crates/env-real" }
+ftree      = { path = "crates/ftree" }

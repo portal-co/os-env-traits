@@ -1,0 +1,13 @@
+[package]
+name = "ftree"
+edition = "2024"
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = {workspace = true,optional = true,features = ["alloc"]}
+
+[features]
+serde=["dep:serde"]
+std=[]
