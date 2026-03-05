@@ -192,3 +192,95 @@ pub trait AiEnv: ErrorType + Send + Sync {
     /// failed; a `(false, 0.0)` result means the file was scanned and not flagged.
     fn scan(&self, path: &str, content: &[u8]) -> Result<(bool, f64), Self::Error>;
 }
+
+// ── Box<T: ?Sized> blanket impls ─────────────────────────────────────────────
+//
+// `embedded_io` (with the `alloc` feature) provides `ErrorType for Box<T: ErrorType + ?Sized>`.
+// These impls add the five local traits so that `Box<dyn FileEnv<Error = E>>`
+// etc. can be used wherever a concrete implementation is expected, keeping
+// error types fully generic.
+
+impl<T: FileEnv + ?Sized> FileEnv for Box<T> {
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, Self::Error> {
+        (**self).read_file(path)
+    }
+    fn write_file(&self, path: &str, contents: &[u8]) -> Result<(), Self::Error> {
+        (**self).write_file(path, contents)
+    }
+    fn file_exists(&self, path: &str) -> bool {
+        (**self).file_exists(path)
+    }
+    fn dir_exists(&self, path: &str) -> bool {
+        (**self).dir_exists(path)
+    }
+    fn create_dir_all(&self, path: &str) -> Result<(), Self::Error> {
+        (**self).create_dir_all(path)
+    }
+    fn walk(
+        &self,
+        root: &str,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + '_>, Self::Error>
+    {
+        (**self).walk(root)
+    }
+    fn env_var(&self, key: &str) -> Option<String> {
+        (**self).env_var(key)
+    }
+}
+
+impl<T: GitEnv + ?Sized> GitEnv for Box<T> {
+    fn repo_root(&self) -> Result<String, Self::Error> {
+        (**self).repo_root()
+    }
+    fn rev_parse(&self, repo_root: &str, rev: &str) -> Result<String, Self::Error> {
+        (**self).rev_parse(repo_root, rev)
+    }
+    fn show_file(&self, repo_root: &str, commit: &str, path: &str) -> Result<Vec<u8>, Self::Error> {
+        (**self).show_file(repo_root, commit, path)
+    }
+    fn changed_files(&self, repo_root: &str, base: &str) -> Result<Vec<String>, Self::Error> {
+        (**self).changed_files(repo_root, base)
+    }
+    fn merge_base(&self, repo_root: &str, branch: &str) -> Result<String, Self::Error> {
+        (**self).merge_base(repo_root, branch)
+    }
+    fn fetch(&self, repo_root: &str, remote: &str, refspec: &str) -> Result<(), Self::Error> {
+        (**self).fetch(repo_root, remote, refspec)
+    }
+    fn init(&self, dir: &str) -> Result<(), Self::Error> {
+        (**self).init(dir)
+    }
+    fn add_and_commit(&self, repo_root: &str, message: &str) -> Result<(), Self::Error> {
+        (**self).add_and_commit(repo_root, message)
+    }
+}
+
+impl<T: GitHubEnv + ?Sized> GitHubEnv for Box<T> {
+    fn current_owner(&self) -> Result<String, Self::Error> {
+        (**self).current_owner()
+    }
+    fn list_repos(&self, org: &str, limit: usize) -> Result<Vec<String>, Self::Error> {
+        (**self).list_repos(org, limit)
+    }
+    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, Self::Error> {
+        (**self).list_contents(org, repo, path)
+    }
+    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Self::Error> {
+        (**self).download_file(download_url)
+    }
+}
+
+impl<T: NetworkEnv + ?Sized> NetworkEnv for Box<T> {
+    fn post_json(&self, url: &str, body: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        (**self).post_json(url, body)
+    }
+    fn get(&self, url: &str) -> Result<Vec<u8>, Self::Error> {
+        (**self).get(url)
+    }
+}
+
+impl<T: AiEnv + ?Sized> AiEnv for Box<T> {
+    fn scan(&self, path: &str, content: &[u8]) -> Result<(bool, f64), Self::Error> {
+        (**self).scan(path, content)
+    }
+}
