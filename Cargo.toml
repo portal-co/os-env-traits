@@ -24,3 +24,5 @@ env-traits = { path = "crates/env-traits" }
 env-fake = { path = "crates/env-fake" }
 env-real = { path = "crates/env-real" }
 ftree = { path = "crates/ftree" }
+awaiter-trait = { path = "../awaiter-trait", default-features = false }
+corosensei-awaiter-trait = { path = "../awaiter-trait/corosensei-awaiter-trait" }

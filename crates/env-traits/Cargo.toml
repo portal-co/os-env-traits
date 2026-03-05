@@ -7,4 +7,8 @@ repository.workspace = true
 description = "Pluggable OS-level environment trait definitions: FileEnv, GitEnv, GitHubEnv, NetworkEnv, AiEnv"
 
 [dependencies]
-embedded-io = { workspace = true }
+embedded-io   = { workspace = true }
+awaiter-trait = { workspace = true, optional = true }
+
+[features]
+awaiter = ["dep:awaiter-trait"]

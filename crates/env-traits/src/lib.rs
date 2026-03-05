@@ -34,6 +34,11 @@ pub use async_::{
     AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv,
 };
 
+#[cfg(feature = "awaiter")]
+pub mod awaiter_bridge;
+#[cfg(feature = "awaiter")]
+pub use awaiter_bridge::WithAwaiter;
+
 // ── FileEnv ──────────────────────────────────────────────────────────────────
 
 /// All local filesystem and environment-variable operations.
