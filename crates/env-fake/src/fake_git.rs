@@ -1,16 +1,15 @@
 // AIKEY-l4qkxonqry2b4gj7bsrkqpryiy
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error};
 use env_traits::GitEnv;
 
 #[derive(Clone, Default)]
 pub struct FakeGitEnv {
-    repo_root:     Arc<Mutex<Option<PathBuf>>>,
+    repo_root:     Arc<Mutex<Option<String>>>,
     revs:          Arc<Mutex<HashMap<String, String>>>,
     show_files:    Arc<Mutex<HashMap<(String, String), Vec<u8>>>>,
     changed_files: Arc<Mutex<Option<Vec<String>>>>,
@@ -18,7 +17,7 @@ pub struct FakeGitEnv {
 }
 
 impl FakeGitEnv {
-    pub fn with_repo_root(self, path: impl Into<PathBuf>) -> Self {
+    pub fn with_repo_root(self, path: impl Into<String>) -> Self {
         *self.repo_root.lock().unwrap() = Some(path.into());
         self
     }
@@ -60,7 +59,9 @@ impl FakeGitEnv {
 }
 
 impl GitEnv for FakeGitEnv {
-    fn repo_root(&self) -> Result<PathBuf> {
+    type Error = Error;
+
+    fn repo_root(&self) -> Result<String, Error> {
         self.repo_root
             .lock()
             .unwrap()
@@ -68,7 +69,7 @@ impl GitEnv for FakeGitEnv {
             .ok_or_else(|| anyhow!("FakeGitEnv: repo_root not set"))
     }
 
-    fn rev_parse(&self, _root: &Path, rev: &str) -> Result<String> {
+    fn rev_parse(&self, _root: &str, rev: &str) -> Result<String, Error> {
         self.revs
             .lock()
             .unwrap()
@@ -77,7 +78,7 @@ impl GitEnv for FakeGitEnv {
             .ok_or_else(|| anyhow!("FakeGitEnv: rev not found: {rev}"))
     }
 
-    fn show_file(&self, _root: &Path, commit: &str, path: &str) -> Result<Vec<u8>> {
+    fn show_file(&self, _root: &str, commit: &str, path: &str) -> Result<Vec<u8>, Error> {
         self.show_files
             .lock()
             .unwrap()
@@ -86,7 +87,7 @@ impl GitEnv for FakeGitEnv {
             .ok_or_else(|| anyhow!("FakeGitEnv: no file {path} at commit {commit}"))
     }
 
-    fn changed_files(&self, _root: &Path, _base: &str) -> Result<Vec<String>> {
+    fn changed_files(&self, _root: &str, _base: &str) -> Result<Vec<String>, Error> {
         self.changed_files
             .lock()
             .unwrap()
@@ -94,7 +95,7 @@ impl GitEnv for FakeGitEnv {
             .ok_or_else(|| anyhow!("FakeGitEnv: changed_files not set"))
     }
 
-    fn merge_base(&self, _root: &Path, branch: &str) -> Result<String> {
+    fn merge_base(&self, _root: &str, branch: &str) -> Result<String, Error> {
         self.merge_bases
             .lock()
             .unwrap()
@@ -103,15 +104,15 @@ impl GitEnv for FakeGitEnv {
             .ok_or_else(|| anyhow!("FakeGitEnv: merge_base not set for branch {branch}"))
     }
 
-    fn fetch(&self, _root: &Path, _remote: &str, _refspec: &str) -> Result<()> {
+    fn fetch(&self, _root: &str, _remote: &str, _refspec: &str) -> Result<(), Error> {
         Ok(()) // no-op
     }
 
-    fn init(&self, _dir: &Path) -> Result<()> {
+    fn init(&self, _dir: &str) -> Result<(), Error> {
         Ok(()) // no-op
     }
 
-    fn add_and_commit(&self, _root: &Path, _message: &str) -> Result<()> {
+    fn add_and_commit(&self, _root: &str, _message: &str) -> Result<(), Error> {
         Ok(()) // no-op
     }
 }

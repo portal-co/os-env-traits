@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error};
 use env_traits::NetworkEnv;
 
 #[derive(Clone, Default)]
@@ -29,7 +29,7 @@ impl FakeNetworkEnv {
         );
     }
 
-    fn record_and_get(&self, url: &str) -> Result<Vec<u8>> {
+    fn record_and_get(&self, url: &str) -> Result<Vec<u8>, Error> {
         self.calls.lock().unwrap().push(url.to_string());
         self.responses
             .lock()
@@ -41,11 +41,13 @@ impl FakeNetworkEnv {
 }
 
 impl NetworkEnv for FakeNetworkEnv {
-    fn post_json(&self, url: &str, _body: &[u8]) -> Result<Vec<u8>> {
+    type Error = Error;
+
+    fn post_json(&self, url: &str, _body: &[u8]) -> Result<Vec<u8>, Error> {
         self.record_and_get(url)
     }
 
-    fn get(&self, url: &str) -> Result<Vec<u8>> {
+    fn get(&self, url: &str) -> Result<Vec<u8>, Error> {
         self.record_and_get(url)
     }
 }

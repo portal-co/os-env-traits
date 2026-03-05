@@ -5,6 +5,3 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Pluggable OS-level environment trait definitions: FileEnv, GitEnv, GitHubEnv, NetworkEnv, AiEnv"
-
-[dependencies]
-anyhow = { workspace = true }

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error};
 use env_traits::{GitHubEnv, GitHubFile};
 
 #[derive(Clone, Default)]
@@ -53,7 +53,9 @@ impl FakeGitHubEnv {
 }
 
 impl GitHubEnv for FakeGitHubEnv {
-    fn current_owner(&self) -> Result<String> {
+    type Error = Error;
+
+    fn current_owner(&self) -> Result<String, Error> {
         self.owner
             .lock()
             .unwrap()
@@ -61,7 +63,7 @@ impl GitHubEnv for FakeGitHubEnv {
             .ok_or_else(|| anyhow!("FakeGitHubEnv: owner not set"))
     }
 
-    fn list_repos(&self, org: &str, _limit: usize) -> Result<Vec<String>> {
+    fn list_repos(&self, org: &str, _limit: usize) -> Result<Vec<String>, Error> {
         self.repos
             .lock()
             .unwrap()
@@ -70,7 +72,7 @@ impl GitHubEnv for FakeGitHubEnv {
             .ok_or_else(|| anyhow!("FakeGitHubEnv: no repos registered for org {org}"))
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>> {
+    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, Error> {
         Ok(self
             .contents
             .lock()
@@ -80,7 +82,7 @@ impl GitHubEnv for FakeGitHubEnv {
             .unwrap_or_default())
     }
 
-    fn download_file(&self, download_url: &str) -> Result<Vec<u8>> {
+    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Error> {
         self.downloads
             .lock()
             .unwrap()

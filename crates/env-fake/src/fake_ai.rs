@@ -1,17 +1,16 @@
 // AIKEY-l4qkxonqry2b4gj7bsrkqpryiy
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
+use anyhow::Error;
 use env_traits::AiEnv;
 
 #[derive(Clone, Default)]
 pub struct FakeAiEnv {
     default:   Arc<Mutex<(bool, f64)>>,
-    overrides: Arc<Mutex<HashMap<PathBuf, (bool, f64)>>>,
+    overrides: Arc<Mutex<HashMap<String, (bool, f64)>>>,
 }
 
 impl FakeAiEnv {
@@ -24,7 +23,7 @@ impl FakeAiEnv {
     /// Override the result for a specific path.
     pub fn with_result(
         self,
-        path: impl Into<PathBuf>,
+        path: impl Into<String>,
         likely: bool,
         confidence: f64,
     ) -> Self {
@@ -37,7 +36,9 @@ impl FakeAiEnv {
 }
 
 impl AiEnv for FakeAiEnv {
-    fn scan(&self, path: &Path, _content: &[u8]) -> Result<(bool, f64)> {
+    type Error = Error;
+
+    fn scan(&self, path: &str, _content: &[u8]) -> Result<(bool, f64), Error> {
         Ok(self
             .overrides
             .lock()

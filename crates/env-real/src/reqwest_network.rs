@@ -1,5 +1,5 @@
 // AIKEY-l4qkxonqry2b4gj7bsrkqpryiy
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error};
 use env_traits::NetworkEnv;
 
 /// `NetworkEnv` backed by `reqwest` blocking client.
@@ -7,7 +7,9 @@ use env_traits::NetworkEnv;
 pub struct ReqwestNetworkEnv;
 
 impl NetworkEnv for ReqwestNetworkEnv {
-    fn post_json(&self, url: &str, body: &[u8]) -> Result<Vec<u8>> {
+    type Error = Error;
+
+    fn post_json(&self, url: &str, body: &[u8]) -> Result<Vec<u8>, Error> {
         let client = reqwest::blocking::Client::new();
         let resp = client
             .post(url)
@@ -25,7 +27,7 @@ impl NetworkEnv for ReqwestNetworkEnv {
         }
     }
 
-    fn get(&self, url: &str) -> Result<Vec<u8>> {
+    fn get(&self, url: &str) -> Result<Vec<u8>, Error> {
         let resp = reqwest::blocking::get(url)
             .with_context(|| format!("GET {url}"))?;
 

@@ -1,4 +1,5 @@
 // AIKEY-l4qkxonqry2b4gj7bsrkqpryiy
+#![no_std]
 //! Pluggable environment traits.
 //!
 //! Every external operation performed by the tools in this workspace is
@@ -6,39 +7,50 @@
 //! real implementations from `env-real`; tests receive in-memory fakes from
 //! `env-fake`.  No crate below this one is allowed to call `std::fs`,
 //! `std::process::Command`, or `reqwest` directly.
+//!
+//! This crate is `no_std` and depends only on `alloc`.  Paths are represented
+//! as `str` / `String` rather than `std::path::Path` / `PathBuf` so that the
+//! trait definitions remain usable in environments without a standard library.
+//! Concrete implementations in `env-real` and `env-fake` map these to
+//! `std::path::Path` internally as needed.
 
-use std::path::{Path, PathBuf};
+extern crate alloc;
 
-pub use anyhow::{Error, Result};
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 // ── FileEnv ──────────────────────────────────────────────────────────────────
 
 /// All local filesystem and environment-variable operations.
 pub trait FileEnv: Send + Sync {
+    /// The error type returned by fallible operations on this environment.
+    type Error: core::fmt::Debug + core::fmt::Display;
+
     /// Read the full contents of a file.
-    fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, Self::Error>;
 
     /// Write (create or overwrite) a file, creating parent directories as
     /// needed.
-    fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
+    fn write_file(&self, path: &str, contents: &[u8]) -> Result<(), Self::Error>;
 
     /// Return `true` if `path` exists and is a regular file.
-    fn file_exists(&self, path: &Path) -> bool;
+    fn file_exists(&self, path: &str) -> bool;
 
     /// Return `true` if `path` exists and is a directory.
-    fn dir_exists(&self, path: &Path) -> bool;
+    fn dir_exists(&self, path: &str) -> bool;
 
     /// Create `path` and all parent directories (like `mkdir -p`).
-    fn create_dir_all(&self, path: &Path) -> Result<()>;
+    fn create_dir_all(&self, path: &str) -> Result<(), Self::Error>;
 
     /// Walk the directory tree rooted at `root`.
     ///
-    /// Yields `(absolute_path, is_dir)` pairs in an unspecified order.
+    /// Yields `(path, is_dir)` pairs in an unspecified order.
     /// Returning an `Err` from the iterator aborts the walk.
     fn walk(
         &self,
-        root: &Path,
-    ) -> Result<Box<dyn Iterator<Item = Result<(PathBuf, bool)>> + '_>>;
+        root: &str,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + '_>, Self::Error>;
 
     /// Read a single environment variable.  Returns `None` when the variable
     /// is absent or not valid UTF-8 (mirrors `std::env::var` semantics).
@@ -49,53 +61,63 @@ pub trait FileEnv: Send + Sync {
 
 /// Pure-git operations (no GitHub API implied).
 pub trait GitEnv: Send + Sync {
+    /// The error type returned by fallible operations on this environment.
+    type Error: core::fmt::Debug + core::fmt::Display;
+
     /// Return the absolute path to the repository root
     /// (`git rev-parse --show-toplevel`).
-    fn repo_root(&self) -> Result<PathBuf>;
+    fn repo_root(&self) -> Result<String, Self::Error>;
 
     /// Resolve a revision string to a full commit SHA
     /// (`git rev-parse <rev>`).
-    fn rev_parse(&self, repo_root: &Path, rev: &str) -> Result<String>;
+    fn rev_parse(&self, repo_root: &str, rev: &str) -> Result<String, Self::Error>;
 
     /// Return the raw bytes of a file at a specific commit
     /// (`git show <commit>:<path>`).
     ///
     /// Returns `Err` when the path does not exist in that commit tree.
-    fn show_file(&self, repo_root: &Path, commit: &str, path: &str)
-        -> Result<Vec<u8>>;
+    fn show_file(
+        &self,
+        repo_root: &str,
+        commit: &str,
+        path: &str,
+    ) -> Result<Vec<u8>, Self::Error>;
 
     /// Return the list of files that differ between `base` and `HEAD`,
     /// filtered to added/copied/modified/renamed regular files
     /// (`git diff --name-only --diff-filter=ACMR <base> HEAD`).
-    fn changed_files(&self, repo_root: &Path, base: &str) -> Result<Vec<String>>;
+    fn changed_files(&self, repo_root: &str, base: &str) -> Result<Vec<String>, Self::Error>;
 
     /// Return the merge-base commit SHA between `HEAD` and
     /// `origin/<branch>` (`git merge-base HEAD origin/<branch>`).
-    fn merge_base(&self, repo_root: &Path, branch: &str) -> Result<String>;
+    fn merge_base(&self, repo_root: &str, branch: &str) -> Result<String, Self::Error>;
 
     /// Fetch a single refspec from a remote
     /// (`git fetch --no-tags <remote> <refspec>`).
-    fn fetch(&self, repo_root: &Path, remote: &str, refspec: &str) -> Result<()>;
+    fn fetch(&self, repo_root: &str, remote: &str, refspec: &str) -> Result<(), Self::Error>;
 
     /// Initialise a new git repository in `dir` (`git init`).
-    fn init(&self, dir: &Path) -> Result<()>;
+    fn init(&self, dir: &str) -> Result<(), Self::Error>;
 
     /// Stage all changes and create a commit with `message`
     /// (`git add -A && git commit -m <message>`).
-    fn add_and_commit(&self, repo_root: &Path, message: &str) -> Result<()>;
+    fn add_and_commit(&self, repo_root: &str, message: &str) -> Result<(), Self::Error>;
 }
 
 // ── GitHubEnv ────────────────────────────────────────────────────────────────
 
 /// GitHub API / `gh` CLI operations.
 pub trait GitHubEnv: Send + Sync {
+    /// The error type returned by fallible operations on this environment.
+    type Error: core::fmt::Debug + core::fmt::Display;
+
     /// Return the owner (org or user) login of the repository in the current
     /// working directory (`gh repo view --json owner --jq .owner.login`).
-    fn current_owner(&self) -> Result<String>;
+    fn current_owner(&self) -> Result<String, Self::Error>;
 
     /// List all repository names inside `org`, up to `limit` results
     /// (`gh repo list <org> --limit <N> --json name --jq .[].name`).
-    fn list_repos(&self, org: &str, limit: usize) -> Result<Vec<String>>;
+    fn list_repos(&self, org: &str, limit: usize) -> Result<Vec<String>, Self::Error>;
 
     /// Recursively list files inside a repository at the given `path` prefix.
     ///
@@ -107,7 +129,7 @@ pub trait GitHubEnv: Send + Sync {
         org: &str,
         repo: &str,
         path: &str,
-    ) -> Result<Vec<GitHubFile>>;
+    ) -> Result<Vec<GitHubFile>, Self::Error>;
 
     /// Download the raw bytes of a file by its GitHub download URL.
     ///
@@ -115,7 +137,7 @@ pub trait GitHubEnv: Send + Sync {
     /// GitHub downloads require authentication headers and may be proxied
     /// through the `gh` CLI in restricted environments.  Fakes return
     /// pre-seeded content keyed by path, not by arbitrary URL.
-    fn download_file(&self, download_url: &str) -> Result<Vec<u8>>;
+    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Self::Error>;
 }
 
 /// A file (or directory entry) returned by the GitHub Contents API.
@@ -136,15 +158,18 @@ pub struct GitHubFile {
 /// Kept separate from `GitHubEnv` so that the AI scanner can use it without
 /// depending on any GitHub concepts.
 pub trait NetworkEnv: Send + Sync {
+    /// The error type returned by fallible operations on this environment.
+    type Error: core::fmt::Debug + core::fmt::Display;
+
     /// POST `body` (JSON bytes) to `url` and return the response body.
     ///
     /// Non-2xx responses must be surfaced as `Err`.
-    fn post_json(&self, url: &str, body: &[u8]) -> Result<Vec<u8>>;
+    fn post_json(&self, url: &str, body: &[u8]) -> Result<Vec<u8>, Self::Error>;
 
     /// GET `url` and return the response body.
     ///
     /// Non-2xx responses must be surfaced as `Err`.
-    fn get(&self, url: &str) -> Result<Vec<u8>>;
+    fn get(&self, url: &str) -> Result<Vec<u8>, Self::Error>;
 }
 
 // ── AiEnv ────────────────────────────────────────────────────────────────────
@@ -154,17 +179,12 @@ pub trait NetworkEnv: Send + Sync {
 /// Wraps the whole scanning concern so that `check-ai-key` treats AI detection
 /// as a single swappable dependency rather than wiring `NetworkEnv` itself.
 pub trait AiEnv: Send + Sync {
+    /// The error type returned by fallible operations on this environment.
+    type Error: core::fmt::Debug + core::fmt::Display;
+
     /// Inspect file content and return `(likely_ai, confidence)`.
     ///
     /// `confidence` is in `[0.0, 1.0]`.  An `Err` means the scan itself
     /// failed; a `(false, 0.0)` result means the file was scanned and not flagged.
-    fn scan(&self, path: &Path, content: &[u8]) -> Result<(bool, f64)>;
+    fn scan(&self, path: &str, content: &[u8]) -> Result<(bool, f64), Self::Error>;
 }
-
-/// Blanket impl so `Box<dyn AiEnv>` satisfies `AiEnv`.
-impl AiEnv for Box<dyn AiEnv> {
-    fn scan(&self, path: &Path, content: &[u8]) -> Result<(bool, f64)> {
-        (**self).scan(path, content)
-    }
-}
-

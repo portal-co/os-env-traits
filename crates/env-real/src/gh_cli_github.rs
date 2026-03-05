@@ -1,7 +1,7 @@
 // AIKEY-l4qkxonqry2b4gj7bsrkqpryiy
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error};
 use env_traits::{GitHubEnv, GitHubFile};
 use serde::Deserialize;
 
@@ -13,7 +13,7 @@ use serde::Deserialize;
 pub struct GhCliGitHubEnv;
 
 impl GhCliGitHubEnv {
-    fn gh(&self, args: &[&str]) -> Result<Vec<u8>> {
+    fn gh(&self, args: &[&str]) -> Result<Vec<u8>, Error> {
         let output = Command::new("gh")
             .args(args)
             .output()
@@ -40,14 +40,16 @@ struct GhContentsEntry {
 }
 
 impl GitHubEnv for GhCliGitHubEnv {
-    fn current_owner(&self) -> Result<String> {
+    type Error = Error;
+
+    fn current_owner(&self) -> Result<String, Error> {
         let raw = self.gh(&[
             "repo", "view", "--json", "owner", "--jq", ".owner.login",
         ])?;
         Ok(String::from_utf8_lossy(&raw).trim().to_string())
     }
 
-    fn list_repos(&self, org: &str, limit: usize) -> Result<Vec<String>> {
+    fn list_repos(&self, org: &str, limit: usize) -> Result<Vec<String>, Error> {
         let limit_s = limit.to_string();
         let raw = self.gh(&[
             "repo", "list", org,
@@ -63,7 +65,7 @@ impl GitHubEnv for GhCliGitHubEnv {
             .collect())
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>> {
+    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, Error> {
         let url = format!(
             "https://api.github.com/repos/{org}/{repo}/contents/{path}"
         );
@@ -90,8 +92,7 @@ impl GitHubEnv for GhCliGitHubEnv {
         Ok(result)
     }
 
-    fn download_file(&self, download_url: &str) -> Result<Vec<u8>> {
-        // Use `gh api` with the raw URL so auth headers are injected.
+    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Error> {
         self.gh(&["api", download_url])
     }
 }
