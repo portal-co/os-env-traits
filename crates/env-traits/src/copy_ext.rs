@@ -27,7 +27,7 @@
 //! assert_eq!(dst.read_file("x/y.txt").unwrap(), b"hello");
 //! ```
 
-use core::future::Future;
+use core::{error::Error, future::Future};
 
 use crate::{AsyncFileEnv, FileEnv};
 
@@ -48,8 +48,26 @@ pub enum CopyError<Se, De> {
 impl<Se: core::fmt::Display, De: core::fmt::Display> core::fmt::Display for CopyError<Se, De> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            CopyError::Read(e)  => write!(f, "copy failed on read: {e}"),
+            CopyError::Read(e) => write!(f, "copy failed on read: {e}"),
             CopyError::Write(e) => write!(f, "copy failed on write: {e}"),
+        }
+    }
+}
+impl<Se: Error + 'static, De: Error + 'static> Error for CopyError<Se, De> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            CopyError::Read(e) => Some(e),
+            CopyError::Write(e) => Some(e),
+        }
+    }
+}
+impl<Se: embedded_io::Error + 'static, De: embedded_io::Error + 'static> embedded_io::Error
+    for CopyError<Se, De>
+{
+    fn kind(&self) -> embedded_io::ErrorKind {
+        match self {
+            CopyError::Read(e) => e.kind(),
+            CopyError::Write(e) => e.kind(),
         }
     }
 }
@@ -80,7 +98,8 @@ impl<S: FileEnv + ?Sized> FileEnvCopyExt for S {
         dst_path: &str,
     ) -> Result<(), CopyError<Self::Error, D::Error>> {
         let contents = self.read_file(src_path).map_err(CopyError::Read)?;
-        dst.write_file(dst_path, &contents).map_err(CopyError::Write)
+        dst.write_file(dst_path, &contents)
+            .map_err(CopyError::Write)
     }
 }
 
@@ -120,7 +139,9 @@ impl<S: FileEnv + ?Sized> FileEnvCopyToAsyncExt for S {
         let read_result = self.read_file(src_path);
         async move {
             let contents = read_result.map_err(CopyError::Read)?;
-            dst.write_file(dst_path, &contents).await.map_err(CopyError::Write)
+            dst.write_file(dst_path, &contents)
+                .await
+                .map_err(CopyError::Write)
         }
     }
 }
@@ -157,7 +178,9 @@ impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyExt for S {
     {
         async move {
             let contents = self.read_file(src_path).await.map_err(CopyError::Read)?;
-            dst.write_file(dst_path, &contents).await.map_err(CopyError::Write)
+            dst.write_file(dst_path, &contents)
+                .await
+                .map_err(CopyError::Write)
         }
     }
 }
@@ -195,7 +218,8 @@ impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyToSyncExt for S {
     {
         async move {
             let contents = self.read_file(src_path).await.map_err(CopyError::Read)?;
-            dst.write_file(dst_path, &contents).map_err(CopyError::Write)
+            dst.write_file(dst_path, &contents)
+                .map_err(CopyError::Write)
         }
     }
 }
