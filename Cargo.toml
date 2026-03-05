@@ -26,3 +26,5 @@ env-fake = { path = "crates/env-fake" }
 env-real = { path = "crates/env-real" }
 ftree = { path = "crates/ftree" }
 awaiter-trait = { git = "https://github.com/portal-co/awaiter-trait.git", default-features = false }
+
+futures = { version = "0.3", default-features = false }
