@@ -10,5 +10,6 @@ serde      = { workspace = true, optional = true, features = ["alloc"] }
 env-traits = { workspace = true, optional = true }
 
 [features]
-serde = ["dep:serde"]
-std   = ["dep:env-traits"]
+serde       = ["dep:serde"]
+env-traits  = ["dep:env-traits"]
+std         = ["env-traits"]
