@@ -121,8 +121,10 @@ where
         root: &str,
     ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), E::Error>> + '_>, E::Error> {
         // The async walk already collected the full listing into a Vec.
-        let entries: Vec<(String, bool)> = block_on!(self.awaiter, self.env.walk(root))?;
-        Ok(Box::new(entries.into_iter().map(Ok)))
+        let entries = block_on!(self.awaiter, self.env.walk(root))?;
+        Ok(Box::new(core::iter::from_fn(move || {
+            block_on!(self.awaiter, entries.next()).transpose()
+        })))
     }
 
     fn env_var(&self, key: &str) -> Option<String> {
@@ -183,7 +185,12 @@ where
         block_on!(self.awaiter, self.env.list_repos(org, limit))
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, E::Error> {
+    fn list_contents(
+        &self,
+        org: &str,
+        repo: &str,
+        path: &str,
+    ) -> Result<Vec<GitHubFile>, E::Error> {
         block_on!(self.awaiter, self.env.list_contents(org, repo, path))
     }
 

@@ -10,3 +10,4 @@ description = "In-memory fake implementations of env-traits for hermetic unit te
 env-traits                = { workspace = true }
 anyhow                    = { workspace = true }
 embedded-io               = { workspace = true }
+futures                   = { workspace = true }

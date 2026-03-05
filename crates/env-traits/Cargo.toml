@@ -8,6 +8,8 @@ description = "Pluggable OS-level environment trait definitions: FileEnv, GitEnv
 
 [dependencies]
 embedded-io   = { workspace = true }
+embedded-io-async = { workspace = true }
+futures = { workspace = true }
 awaiter-trait = { workspace = true, optional = true }
 
 [features]

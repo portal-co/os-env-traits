@@ -10,6 +10,7 @@ use env_traits::{
     async_::{AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv},
     AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv,
 };
+use futures::{stream, Stream};
 
 // ── FakeError ─────────────────────────────────────────────────────────────────
 
@@ -47,20 +48,26 @@ fn fake_err(e: anyhow::Error) -> FakeError {
 /// In-memory filesystem + env-var store.
 #[derive(Clone, Default)]
 pub struct FakeFileEnv {
-    files:    Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     env_vars: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl FakeFileEnv {
     /// Seed a file with given contents.
     pub fn with_file(self, path: impl Into<String>, contents: impl Into<Vec<u8>>) -> Self {
-        self.files.lock().unwrap().insert(path.into(), contents.into());
+        self.files
+            .lock()
+            .unwrap()
+            .insert(path.into(), contents.into());
         self
     }
 
     /// Seed an environment variable.
     pub fn with_env(self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env_vars.lock().unwrap().insert(key.into(), value.into());
+        self.env_vars
+            .lock()
+            .unwrap()
+            .insert(key.into(), value.into());
         self
     }
 }
@@ -107,7 +114,8 @@ impl FileEnv for FakeFileEnv {
     fn walk(
         &self,
         root: &str,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), FakeError>> + '_>, FakeError> {
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), FakeError>> + Send + '_>, FakeError>
+    {
         let prefix = root.to_string();
         let entries: Vec<Result<(String, bool), FakeError>> = self
             .files
@@ -126,12 +134,19 @@ impl FileEnv for FakeFileEnv {
 }
 
 impl AsyncFileEnv for FakeFileEnv {
-    fn read_file(&self, path: &str) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
+    fn read_file(
+        &self,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let result = FileEnv::read_file(self, path);
         async move { result }
     }
 
-    fn write_file(&self, path: &str, contents: &[u8]) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+    fn write_file(
+        &self,
+        path: &str,
+        contents: &[u8],
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
         let result = FileEnv::write_file(self, path, contents);
         async move { result }
     }
@@ -146,15 +161,25 @@ impl AsyncFileEnv for FakeFileEnv {
         async move { result }
     }
 
-    fn create_dir_all(&self, path: &str) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+    fn create_dir_all(
+        &self,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
         let result = FileEnv::create_dir_all(self, path);
         async move { result }
     }
 
-    fn walk(&self, root: &str) -> impl core::future::Future<Output = Result<Vec<(String, bool)>, FakeError>> + Send {
-        let result = FileEnv::walk(self, root)
-            .and_then(|iter| iter.collect::<Result<Vec<(String, bool)>, _>>());
-        async move { result }
+    fn walk(
+        &self,
+        root: &str,
+    ) -> impl core::future::Future<
+        Output = Result<
+            impl Stream<Item = Result<(String, bool), FakeError>> + Unpin + Send,
+            FakeError,
+        >,
+    > + Send {
+        let r = FileEnv::walk(self, root).and_then(|iter| Ok(stream::iter(iter)));
+        async move { r }
     }
 
     fn env_var(&self, key: &str) -> impl core::future::Future<Output = Option<String>> + Send {
@@ -167,11 +192,11 @@ impl AsyncFileEnv for FakeFileEnv {
 
 #[derive(Clone, Default)]
 pub struct FakeGitEnv {
-    repo_root:     Arc<Mutex<Option<String>>>,
-    revs:          Arc<Mutex<HashMap<String, String>>>,
-    show_files:    Arc<Mutex<HashMap<(String, String), Vec<u8>>>>,
+    repo_root: Arc<Mutex<Option<String>>>,
+    revs: Arc<Mutex<HashMap<String, String>>>,
+    show_files: Arc<Mutex<HashMap<(String, String), Vec<u8>>>>,
     changed_files: Arc<Mutex<Option<Vec<String>>>>,
-    merge_bases:   Arc<Mutex<HashMap<String, String>>>,
+    merge_bases: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl FakeGitEnv {
@@ -261,7 +286,11 @@ impl GitEnv for FakeGitEnv {
             .unwrap()
             .get(branch)
             .cloned()
-            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: merge_base not set for branch {branch}")))
+            .ok_or_else(|| {
+                fake_err(anyhow!(
+                    "FakeGitEnv: merge_base not set for branch {branch}"
+                ))
+            })
     }
 
     fn fetch(&self, _root: &str, _remote: &str, _refspec: &str) -> Result<(), FakeError> {
@@ -282,23 +311,45 @@ impl AsyncGitEnv for FakeGitEnv {
         let r = GitEnv::repo_root(self);
         async move { r }
     }
-    fn rev_parse(&self, repo_root: &str, rev: &str) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
+    fn rev_parse(
+        &self,
+        repo_root: &str,
+        rev: &str,
+    ) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
         let r = GitEnv::rev_parse(self, repo_root, rev);
         async move { r }
     }
-    fn show_file(&self, repo_root: &str, commit: &str, path: &str) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
+    fn show_file(
+        &self,
+        repo_root: &str,
+        commit: &str,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let r = GitEnv::show_file(self, repo_root, commit, path);
         async move { r }
     }
-    fn changed_files(&self, repo_root: &str, base: &str) -> impl core::future::Future<Output = Result<Vec<String>, FakeError>> + Send {
+    fn changed_files(
+        &self,
+        repo_root: &str,
+        base: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<String>, FakeError>> + Send {
         let r = GitEnv::changed_files(self, repo_root, base);
         async move { r }
     }
-    fn merge_base(&self, repo_root: &str, branch: &str) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
+    fn merge_base(
+        &self,
+        repo_root: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
         let r = GitEnv::merge_base(self, repo_root, branch);
         async move { r }
     }
-    fn fetch(&self, repo_root: &str, remote: &str, refspec: &str) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+    fn fetch(
+        &self,
+        repo_root: &str,
+        remote: &str,
+        refspec: &str,
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
         let r = GitEnv::fetch(self, repo_root, remote, refspec);
         async move { r }
     }
@@ -306,7 +357,11 @@ impl AsyncGitEnv for FakeGitEnv {
         let r = GitEnv::init(self, dir);
         async move { r }
     }
-    fn add_and_commit(&self, repo_root: &str, message: &str) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+    fn add_and_commit(
+        &self,
+        repo_root: &str,
+        message: &str,
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
         let r = GitEnv::add_and_commit(self, repo_root, message);
         async move { r }
     }
@@ -316,9 +371,9 @@ impl AsyncGitEnv for FakeGitEnv {
 
 #[derive(Clone, Default)]
 pub struct FakeGitHubEnv {
-    owner:     Arc<Mutex<Option<String>>>,
-    repos:     Arc<Mutex<HashMap<String, Vec<String>>>>,
-    contents:  Arc<Mutex<HashMap<(String, String, String), Vec<GitHubFile>>>>,
+    owner: Arc<Mutex<Option<String>>>,
+    repos: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    contents: Arc<Mutex<HashMap<(String, String, String), Vec<GitHubFile>>>>,
     downloads: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
@@ -354,7 +409,10 @@ impl FakeGitHubEnv {
 
     /// Register a download URL → bytes mapping.
     pub fn with_download(self, url: impl Into<String>, content: impl Into<Vec<u8>>) -> Self {
-        self.downloads.lock().unwrap().insert(url.into(), content.into());
+        self.downloads
+            .lock()
+            .unwrap()
+            .insert(url.into(), content.into());
         self
     }
 }
@@ -381,7 +439,12 @@ impl GitHubEnv for FakeGitHubEnv {
             .ok_or_else(|| fake_err(anyhow!("FakeGitHubEnv: no repos registered for org {org}")))
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, FakeError> {
+    fn list_contents(
+        &self,
+        org: &str,
+        repo: &str,
+        path: &str,
+    ) -> Result<Vec<GitHubFile>, FakeError> {
         Ok(self
             .contents
             .lock()
@@ -397,24 +460,42 @@ impl GitHubEnv for FakeGitHubEnv {
             .unwrap()
             .get(download_url)
             .cloned()
-            .ok_or_else(|| fake_err(anyhow!("FakeGitHubEnv: no download registered for {download_url}")))
+            .ok_or_else(|| {
+                fake_err(anyhow!(
+                    "FakeGitHubEnv: no download registered for {download_url}"
+                ))
+            })
     }
 }
 
 impl AsyncGitHubEnv for FakeGitHubEnv {
-    fn current_owner(&self) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
+    fn current_owner(
+        &self,
+    ) -> impl core::future::Future<Output = Result<String, FakeError>> + Send {
         let r = GitHubEnv::current_owner(self);
         async move { r }
     }
-    fn list_repos(&self, org: &str, limit: usize) -> impl core::future::Future<Output = Result<Vec<String>, FakeError>> + Send {
+    fn list_repos(
+        &self,
+        org: &str,
+        limit: usize,
+    ) -> impl core::future::Future<Output = Result<Vec<String>, FakeError>> + Send {
         let r = GitHubEnv::list_repos(self, org, limit);
         async move { r }
     }
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> impl core::future::Future<Output = Result<Vec<GitHubFile>, FakeError>> + Send {
+    fn list_contents(
+        &self,
+        org: &str,
+        repo: &str,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<GitHubFile>, FakeError>> + Send {
         let r = GitHubEnv::list_contents(self, org, repo, path);
         async move { r }
     }
-    fn download_file(&self, download_url: &str) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
+    fn download_file(
+        &self,
+        download_url: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let r = GitHubEnv::download_file(self, download_url);
         async move { r }
     }
@@ -425,13 +506,16 @@ impl AsyncGitHubEnv for FakeGitHubEnv {
 #[derive(Clone, Default)]
 pub struct FakeNetworkEnv {
     responses: Arc<Mutex<HashMap<String, Vec<u8>>>>,
-    calls:     Arc<Mutex<Vec<String>>>,
+    calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeNetworkEnv {
     /// Register a URL → response body mapping (used by both GET and POST).
     pub fn with_response(self, url: impl Into<String>, body: impl Into<Vec<u8>>) -> Self {
-        self.responses.lock().unwrap().insert(url.into(), body.into());
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(url.into(), body.into());
         self
     }
 
@@ -470,11 +554,18 @@ impl NetworkEnv for FakeNetworkEnv {
 }
 
 impl AsyncNetworkEnv for FakeNetworkEnv {
-    fn post_json(&self, url: &str, body: &[u8]) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
+    fn post_json(
+        &self,
+        url: &str,
+        body: &[u8],
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let r = NetworkEnv::post_json(self, url, body);
         async move { r }
     }
-    fn get(&self, url: &str) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
+    fn get(
+        &self,
+        url: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let r = NetworkEnv::get(self, url);
         async move { r }
     }
@@ -484,7 +575,7 @@ impl AsyncNetworkEnv for FakeNetworkEnv {
 
 #[derive(Clone, Default)]
 pub struct FakeAiEnv {
-    default:   Arc<Mutex<(bool, f64)>>,
+    default: Arc<Mutex<(bool, f64)>>,
     overrides: Arc<Mutex<HashMap<String, (bool, f64)>>>,
 }
 
@@ -496,12 +587,7 @@ impl FakeAiEnv {
     }
 
     /// Override the result for a specific path.
-    pub fn with_result(
-        self,
-        path: impl Into<String>,
-        likely: bool,
-        confidence: f64,
-    ) -> Self {
+    pub fn with_result(self, path: impl Into<String>, likely: bool, confidence: f64) -> Self {
         self.overrides
             .lock()
             .unwrap()
@@ -527,7 +613,11 @@ impl AiEnv for FakeAiEnv {
 }
 
 impl AsyncAiEnv for FakeAiEnv {
-    fn scan(&self, path: &str, content: &[u8]) -> impl core::future::Future<Output = Result<(bool, f64), FakeError>> + Send {
+    fn scan(
+        &self,
+        path: &str,
+        content: &[u8],
+    ) -> impl core::future::Future<Output = Result<(bool, f64), FakeError>> + Send {
         let r = AiEnv::scan(self, path, content);
         async move { r }
     }

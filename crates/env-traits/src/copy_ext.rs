@@ -42,6 +42,7 @@
 
 use alloc::{string::String, vec::Vec};
 use core::{error::Error, future::Future};
+use futures::{StreamExt, TryStreamExt};
 
 use crate::{AsyncFileEnv, FileEnv};
 
@@ -282,8 +283,8 @@ impl<S: FileEnv + ?Sized> FileEnvCopyToAsyncExt for S {
         })();
         // Also collect the file contents synchronously, keyed by rebased dst
         // path, so nothing from `self` is held across awaits.
-        let entries: Result<Vec<(String, Option<Vec<u8>>)>, CopyError<S::Error, D::Error>> =
-            walked.and_then(|entries| {
+        let entries: Result<Vec<(String, Option<Vec<u8>>)>, CopyError<S::Error, D::Error>> = walked
+            .and_then(|entries| {
                 entries
                     .into_iter()
                     .map(|(entry_path, is_dir)| {
@@ -291,8 +292,7 @@ impl<S: FileEnv + ?Sized> FileEnvCopyToAsyncExt for S {
                         if is_dir {
                             Ok((dst_path, None))
                         } else {
-                            let contents =
-                                self.read_file(&entry_path).map_err(CopyError::Read)?;
+                            let contents = self.read_file(&entry_path).map_err(CopyError::Read)?;
                             Ok((dst_path, Some(contents)))
                         }
                     })
@@ -353,7 +353,9 @@ pub trait AsyncFileEnvCopyExt: AsyncFileEnv {
         dst_root: &'d str,
     ) -> impl Future<Output = Result<(), CopyError<Self::Error, D::Error>>> + Send + 's
     where
-        'd: 's;
+        'd: 's,
+        Self::Error: Send,
+        D::Error: Send;
 }
 
 impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyExt for S {
@@ -382,20 +384,21 @@ impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyExt for S {
     ) -> impl Future<Output = Result<(), CopyError<Self::Error, D::Error>>> + Send + 's
     where
         'd: 's,
+        Self::Error: Send,
+        D::Error: Send,
     {
         async move {
-            let entries = self.walk(src_root).await.map_err(CopyError::Read)?;
-            for (entry_path, is_dir) in entries {
+            let mut entries = self.walk(src_root).await.map_err(CopyError::Read)?;
+            while let Some((entry_path, is_dir)) =
+                entries.try_next().await.map_err(CopyError::Read)?
+            {
                 let dst_path = rebase(src_root, &entry_path, dst_root);
                 if is_dir {
                     dst.create_dir_all(&dst_path)
                         .await
                         .map_err(CopyError::Write)?;
                 } else {
-                    let contents = self
-                        .read_file(&entry_path)
-                        .await
-                        .map_err(CopyError::Read)?;
+                    let contents = self.read_file(&entry_path).await.map_err(CopyError::Read)?;
                     dst.write_file(&dst_path, &contents)
                         .await
                         .map_err(CopyError::Write)?;
@@ -439,7 +442,9 @@ pub trait AsyncFileEnvCopyToSyncExt: AsyncFileEnv {
         dst_root: &'d str,
     ) -> impl Future<Output = Result<(), CopyError<Self::Error, D::Error>>> + Send + 's
     where
-        'd: 's;
+        'd: 's,
+        Self::Error: Send,
+        D::Error: Send;
 }
 
 impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyToSyncExt for S {
@@ -467,18 +472,19 @@ impl<S: AsyncFileEnv + ?Sized> AsyncFileEnvCopyToSyncExt for S {
     ) -> impl Future<Output = Result<(), CopyError<Self::Error, D::Error>>> + Send + 's
     where
         'd: 's,
+        S::Error: Send,
+        D::Error: Send,
     {
         async move {
-            let entries = self.walk(src_root).await.map_err(CopyError::Read)?;
-            for (entry_path, is_dir) in entries {
+            let mut entries = self.walk(src_root).await.map_err(CopyError::Read)?;
+            while let Some((entry_path, is_dir)) =
+                entries.try_next().await.map_err(CopyError::Read)?
+            {
                 let dst_path = rebase(src_root, &entry_path, dst_root);
                 if is_dir {
                     dst.create_dir_all(&dst_path).map_err(CopyError::Write)?;
                 } else {
-                    let contents = self
-                        .read_file(&entry_path)
-                        .await
-                        .map_err(CopyError::Read)?;
+                    let contents = self.read_file(&entry_path).await.map_err(CopyError::Read)?;
                     dst.write_file(&dst_path, &contents)
                         .map_err(CopyError::Write)?;
                 }

@@ -15,9 +15,8 @@
 //!
 //! The sync [`FileEnv::walk`] returns a lazy `Box<dyn Iterator<…>>`.
 //! Async iterators (`Stream`) are not yet stable, so [`AsyncFileEnv::walk`]
-//! instead resolves the entire listing into a `Vec<(String, bool)>` before
-//! returning.  This keeps the API simple and avoids a dependency on
-//! `futures` or any particular async-stream crate.
+//! instead returns a `Stream` of `(String, bool)` pairs.  This keeps the API
+//! simple and avoids a dependency on any particular async-stream crate.
 //!
 //! [`FileEnv::walk`]: crate::FileEnv::walk
 
@@ -26,6 +25,7 @@ use core::future::Future;
 use alloc::{string::String, vec::Vec};
 
 use embedded_io::ErrorType;
+use futures::Stream;
 
 use crate::GitHubFile;
 
@@ -51,19 +51,18 @@ pub trait AsyncFileEnv: ErrorType + Send + Sync {
     fn dir_exists(&self, path: &str) -> impl Future<Output = bool> + Send;
 
     /// Create `path` and all parent directories (like `mkdir -p`).
-    fn create_dir_all(
-        &self,
-        path: &str,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn create_dir_all(&self, path: &str) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Walk the directory tree rooted at `root`.
     ///
-    /// Returns all `(path, is_dir)` pairs as an owned `Vec`.  Entries are
+    /// Returns all `(path, is_dir)` pairs as a `Stream`.  Entries are
     /// yielded in an unspecified order.
     fn walk(
         &self,
         root: &str,
-    ) -> impl Future<Output = Result<Vec<(String, bool)>, Self::Error>> + Send;
+    ) -> impl Future<
+        Output = Result<impl Stream<Item = Result<(String, bool), Self::Error>> + Unpin + Send, Self::Error>,
+    > + Send;
 
     /// Read a single environment variable.  Returns `None` when the variable
     /// is absent or not valid UTF-8.

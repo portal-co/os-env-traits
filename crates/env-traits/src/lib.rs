@@ -72,7 +72,7 @@ pub trait FileEnv: ErrorType + Send + Sync {
     fn walk(
         &self,
         root: &str,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + '_>, Self::Error>;
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + Send + '_>, Self::Error>;
 
     /// Read a single environment variable.  Returns `None` when the variable
     /// is absent or not valid UTF-8 (mirrors `std::env::var` semantics).
@@ -225,7 +225,7 @@ impl<T: FileEnv + ?Sized> FileEnv for Box<T> {
     fn walk(
         &self,
         root: &str,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + '_>, Self::Error>
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Self::Error>> + Send + '_>, Self::Error>
     {
         (**self).walk(root)
     }

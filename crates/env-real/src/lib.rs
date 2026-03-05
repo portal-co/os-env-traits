@@ -8,6 +8,7 @@ use env_traits::{
     async_::{AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv},
     AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv,
 };
+use futures::{stream, Stream};
 use serde::Deserialize;
 use walkdir::WalkDir;
 
@@ -88,18 +89,15 @@ impl FileEnv for OsFileEnv {
     fn walk(
         &self,
         root: &str,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), RealError>> + '_>, RealError> {
-        let iter = WalkDir::new(root)
-            .min_depth(1)
-            .into_iter()
-            .map(|entry| {
-                let e = entry
-                    .with_context(|| "walkdir entry error")
-                    .map_err(real_err)?;
-                let is_dir = e.file_type().is_dir();
-                let path = e.path().to_string_lossy().into_owned();
-                Ok((path, is_dir))
-            });
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), RealError>> + Send + '_>, RealError> {
+        let iter = WalkDir::new(root).min_depth(1).into_iter().map(|entry| {
+            let e = entry
+                .with_context(|| "walkdir entry error")
+                .map_err(real_err)?;
+            let is_dir = e.file_type().is_dir();
+            let path = e.path().to_string_lossy().into_owned();
+            Ok((path, is_dir))
+        });
         Ok(Box::new(iter))
     }
 
@@ -109,11 +107,18 @@ impl FileEnv for OsFileEnv {
 }
 
 impl AsyncFileEnv for OsFileEnv {
-    fn read_file(&self, path: &str) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
+    fn read_file(
+        &self,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = FileEnv::read_file(self, path);
         async move { r }
     }
-    fn write_file(&self, path: &str, contents: &[u8]) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+    fn write_file(
+        &self,
+        path: &str,
+        contents: &[u8],
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
         let r = FileEnv::write_file(self, path, contents);
         async move { r }
     }
@@ -125,13 +130,23 @@ impl AsyncFileEnv for OsFileEnv {
         let r = FileEnv::dir_exists(self, path);
         async move { r }
     }
-    fn create_dir_all(&self, path: &str) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+    fn create_dir_all(
+        &self,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
         let r = FileEnv::create_dir_all(self, path);
         async move { r }
     }
-    fn walk(&self, root: &str) -> impl core::future::Future<Output = Result<Vec<(String, bool)>, RealError>> + Send {
-        let r = FileEnv::walk(self, root)
-            .and_then(|iter| iter.collect::<Result<Vec<(String, bool)>, _>>());
+    fn walk(
+        &self,
+        root: &str,
+    ) -> impl core::future::Future<
+        Output = Result<
+            impl Stream<Item = Result<(String, bool), RealError>> + Unpin + Send,
+            RealError,
+        >,
+    > + Send {
+        let r = FileEnv::walk(self, root).and_then(|iter| Ok(stream::iter(iter)));
         async move { r }
     }
     fn env_var(&self, key: &str) -> impl core::future::Future<Output = Option<String>> + Send {
@@ -264,23 +279,45 @@ impl AsyncGitEnv for ProcessGitEnv {
         let r = GitEnv::repo_root(self);
         async move { r }
     }
-    fn rev_parse(&self, repo_root: &str, rev: &str) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
+    fn rev_parse(
+        &self,
+        repo_root: &str,
+        rev: &str,
+    ) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
         let r = GitEnv::rev_parse(self, repo_root, rev);
         async move { r }
     }
-    fn show_file(&self, repo_root: &str, commit: &str, path: &str) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
+    fn show_file(
+        &self,
+        repo_root: &str,
+        commit: &str,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = GitEnv::show_file(self, repo_root, commit, path);
         async move { r }
     }
-    fn changed_files(&self, repo_root: &str, base: &str) -> impl core::future::Future<Output = Result<Vec<String>, RealError>> + Send {
+    fn changed_files(
+        &self,
+        repo_root: &str,
+        base: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<String>, RealError>> + Send {
         let r = GitEnv::changed_files(self, repo_root, base);
         async move { r }
     }
-    fn merge_base(&self, repo_root: &str, branch: &str) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
+    fn merge_base(
+        &self,
+        repo_root: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
         let r = GitEnv::merge_base(self, repo_root, branch);
         async move { r }
     }
-    fn fetch(&self, repo_root: &str, remote: &str, refspec: &str) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+    fn fetch(
+        &self,
+        repo_root: &str,
+        remote: &str,
+        refspec: &str,
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
         let r = GitEnv::fetch(self, repo_root, remote, refspec);
         async move { r }
     }
@@ -288,7 +325,11 @@ impl AsyncGitEnv for ProcessGitEnv {
         let r = GitEnv::init(self, dir);
         async move { r }
     }
-    fn add_and_commit(&self, repo_root: &str, message: &str) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+    fn add_and_commit(
+        &self,
+        repo_root: &str,
+        message: &str,
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
         let r = GitEnv::add_and_commit(self, repo_root, message);
         async move { r }
     }
@@ -354,7 +395,12 @@ impl GitHubEnv for GhCliGitHubEnv {
             .collect())
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, RealError> {
+    fn list_contents(
+        &self,
+        org: &str,
+        repo: &str,
+        path: &str,
+    ) -> Result<Vec<GitHubFile>, RealError> {
         let url = format!("https://api.github.com/repos/{org}/{repo}/contents/{path}");
         let raw = self.gh(&["api", &url, "--paginate"])?;
         let entries: Vec<GhContentsEntry> = serde_json::from_slice(&raw)
@@ -384,19 +430,33 @@ impl GitHubEnv for GhCliGitHubEnv {
 }
 
 impl AsyncGitHubEnv for GhCliGitHubEnv {
-    fn current_owner(&self) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
+    fn current_owner(
+        &self,
+    ) -> impl core::future::Future<Output = Result<String, RealError>> + Send {
         let r = GitHubEnv::current_owner(self);
         async move { r }
     }
-    fn list_repos(&self, org: &str, limit: usize) -> impl core::future::Future<Output = Result<Vec<String>, RealError>> + Send {
+    fn list_repos(
+        &self,
+        org: &str,
+        limit: usize,
+    ) -> impl core::future::Future<Output = Result<Vec<String>, RealError>> + Send {
         let r = GitHubEnv::list_repos(self, org, limit);
         async move { r }
     }
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> impl core::future::Future<Output = Result<Vec<GitHubFile>, RealError>> + Send {
+    fn list_contents(
+        &self,
+        org: &str,
+        repo: &str,
+        path: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<GitHubFile>, RealError>> + Send {
         let r = GitHubEnv::list_contents(self, org, repo, path);
         async move { r }
     }
-    fn download_file(&self, download_url: &str) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
+    fn download_file(
+        &self,
+        download_url: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = GitHubEnv::download_file(self, download_url);
         async move { r }
     }
@@ -454,11 +514,18 @@ impl NetworkEnv for ReqwestNetworkEnv {
 }
 
 impl AsyncNetworkEnv for ReqwestNetworkEnv {
-    fn post_json(&self, url: &str, body: &[u8]) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
+    fn post_json(
+        &self,
+        url: &str,
+        body: &[u8],
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = NetworkEnv::post_json(self, url, body);
         async move { r }
     }
-    fn get(&self, url: &str) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
+    fn get(
+        &self,
+        url: &str,
+    ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = NetworkEnv::get(self, url);
         async move { r }
     }
@@ -487,7 +554,11 @@ impl AiEnv for NoopAiEnv {
 }
 
 impl AsyncAiEnv for NoopAiEnv {
-    fn scan(&self, path: &str, content: &[u8]) -> impl core::future::Future<Output = Result<(bool, f64), RealError>> + Send {
+    fn scan(
+        &self,
+        path: &str,
+        content: &[u8],
+    ) -> impl core::future::Future<Output = Result<(bool, f64), RealError>> + Send {
         let r = AiEnv::scan(self, path, content);
         async move { r }
     }
