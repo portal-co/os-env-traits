@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use env_traits::{GitHubEnv, GitHubFile};
+
+use crate::error::{fake_err, FakeError};
 
 #[derive(Clone, Default)]
 pub struct FakeGitHubEnv {
@@ -52,27 +54,29 @@ impl FakeGitHubEnv {
     }
 }
 
-impl GitHubEnv for FakeGitHubEnv {
-    type Error = Error;
+impl embedded_io::ErrorType for FakeGitHubEnv {
+    type Error = FakeError;
+}
 
-    fn current_owner(&self) -> Result<String, Error> {
+impl GitHubEnv for FakeGitHubEnv {
+    fn current_owner(&self) -> Result<String, FakeError> {
         self.owner
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| anyhow!("FakeGitHubEnv: owner not set"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitHubEnv: owner not set")))
     }
 
-    fn list_repos(&self, org: &str, _limit: usize) -> Result<Vec<String>, Error> {
+    fn list_repos(&self, org: &str, _limit: usize) -> Result<Vec<String>, FakeError> {
         self.repos
             .lock()
             .unwrap()
             .get(org)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeGitHubEnv: no repos registered for org {org}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitHubEnv: no repos registered for org {org}")))
     }
 
-    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, Error> {
+    fn list_contents(&self, org: &str, repo: &str, path: &str) -> Result<Vec<GitHubFile>, FakeError> {
         Ok(self
             .contents
             .lock()
@@ -82,12 +86,12 @@ impl GitHubEnv for FakeGitHubEnv {
             .unwrap_or_default())
     }
 
-    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Error> {
+    fn download_file(&self, download_url: &str) -> Result<Vec<u8>, FakeError> {
         self.downloads
             .lock()
             .unwrap()
             .get(download_url)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeGitHubEnv: no download registered for {download_url}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitHubEnv: no download registered for {download_url}")))
     }
 }

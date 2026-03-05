@@ -4,8 +4,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::Error;
 use env_traits::AiEnv;
+
+use crate::error::FakeError;
 
 #[derive(Clone, Default)]
 pub struct FakeAiEnv {
@@ -35,10 +36,12 @@ impl FakeAiEnv {
     }
 }
 
-impl AiEnv for FakeAiEnv {
-    type Error = Error;
+impl embedded_io::ErrorType for FakeAiEnv {
+    type Error = FakeError;
+}
 
-    fn scan(&self, path: &str, _content: &[u8]) -> Result<(bool, f64), Error> {
+impl AiEnv for FakeAiEnv {
+    fn scan(&self, path: &str, _content: &[u8]) -> Result<(bool, f64), FakeError> {
         Ok(self
             .overrides
             .lock()

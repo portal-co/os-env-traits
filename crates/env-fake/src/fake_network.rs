@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use env_traits::NetworkEnv;
+
+use crate::error::{fake_err, FakeError};
 
 #[derive(Clone, Default)]
 pub struct FakeNetworkEnv {
@@ -29,25 +31,27 @@ impl FakeNetworkEnv {
         );
     }
 
-    fn record_and_get(&self, url: &str) -> Result<Vec<u8>, Error> {
+    fn record_and_get(&self, url: &str) -> Result<Vec<u8>, FakeError> {
         self.calls.lock().unwrap().push(url.to_string());
         self.responses
             .lock()
             .unwrap()
             .get(url)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeNetworkEnv: no response registered for {url}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeNetworkEnv: no response registered for {url}")))
     }
 }
 
-impl NetworkEnv for FakeNetworkEnv {
-    type Error = Error;
+impl embedded_io::ErrorType for FakeNetworkEnv {
+    type Error = FakeError;
+}
 
-    fn post_json(&self, url: &str, _body: &[u8]) -> Result<Vec<u8>, Error> {
+impl NetworkEnv for FakeNetworkEnv {
+    fn post_json(&self, url: &str, _body: &[u8]) -> Result<Vec<u8>, FakeError> {
         self.record_and_get(url)
     }
 
-    fn get(&self, url: &str) -> Result<Vec<u8>, Error> {
+    fn get(&self, url: &str) -> Result<Vec<u8>, FakeError> {
         self.record_and_get(url)
     }
 }

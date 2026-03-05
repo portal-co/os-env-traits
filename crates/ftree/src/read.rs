@@ -17,7 +17,7 @@ impl<T> FileTree<T> {
         env: &impl env_traits::FileEnv<Error = E>,
     ) -> Result<FileTree<Vec<u8>>, E>
     where
-        E: core::fmt::Debug + core::fmt::Display,
+        E: embedded_io::Error,
     {
         Ok(match self {
             FileTree::File { .. } => FileTree::File {

@@ -6,10 +6,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-serde      = { workspace = true, optional = true, features = ["alloc"] }
-env-traits = { workspace = true, optional = true }
+serde       = { workspace = true, optional = true, features = ["alloc"] }
+env-traits  = { workspace = true, optional = true }
+embedded-io = { workspace = true, optional = true }
 
 [features]
 serde       = ["dep:serde"]
-env-traits  = ["dep:env-traits"]
+env-traits  = ["dep:env-traits", "dep:embedded-io"]
 std         = ["env-traits"]

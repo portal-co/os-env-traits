@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use env_traits::GitEnv;
+
+use crate::error::{fake_err, FakeError};
 
 #[derive(Clone, Default)]
 pub struct FakeGitEnv {
@@ -58,61 +60,63 @@ impl FakeGitEnv {
     }
 }
 
-impl GitEnv for FakeGitEnv {
-    type Error = Error;
+impl embedded_io::ErrorType for FakeGitEnv {
+    type Error = FakeError;
+}
 
-    fn repo_root(&self) -> Result<String, Error> {
+impl GitEnv for FakeGitEnv {
+    fn repo_root(&self) -> Result<String, FakeError> {
         self.repo_root
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| anyhow!("FakeGitEnv: repo_root not set"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: repo_root not set")))
     }
 
-    fn rev_parse(&self, _root: &str, rev: &str) -> Result<String, Error> {
+    fn rev_parse(&self, _root: &str, rev: &str) -> Result<String, FakeError> {
         self.revs
             .lock()
             .unwrap()
             .get(rev)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeGitEnv: rev not found: {rev}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: rev not found: {rev}")))
     }
 
-    fn show_file(&self, _root: &str, commit: &str, path: &str) -> Result<Vec<u8>, Error> {
+    fn show_file(&self, _root: &str, commit: &str, path: &str) -> Result<Vec<u8>, FakeError> {
         self.show_files
             .lock()
             .unwrap()
             .get(&(commit.to_string(), path.to_string()))
             .cloned()
-            .ok_or_else(|| anyhow!("FakeGitEnv: no file {path} at commit {commit}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: no file {path} at commit {commit}")))
     }
 
-    fn changed_files(&self, _root: &str, _base: &str) -> Result<Vec<String>, Error> {
+    fn changed_files(&self, _root: &str, _base: &str) -> Result<Vec<String>, FakeError> {
         self.changed_files
             .lock()
             .unwrap()
             .clone()
-            .ok_or_else(|| anyhow!("FakeGitEnv: changed_files not set"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: changed_files not set")))
     }
 
-    fn merge_base(&self, _root: &str, branch: &str) -> Result<String, Error> {
+    fn merge_base(&self, _root: &str, branch: &str) -> Result<String, FakeError> {
         self.merge_bases
             .lock()
             .unwrap()
             .get(branch)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeGitEnv: merge_base not set for branch {branch}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeGitEnv: merge_base not set for branch {branch}")))
     }
 
-    fn fetch(&self, _root: &str, _remote: &str, _refspec: &str) -> Result<(), Error> {
-        Ok(()) // no-op
+    fn fetch(&self, _root: &str, _remote: &str, _refspec: &str) -> Result<(), FakeError> {
+        Ok(())
     }
 
-    fn init(&self, _dir: &str) -> Result<(), Error> {
-        Ok(()) // no-op
+    fn init(&self, _dir: &str) -> Result<(), FakeError> {
+        Ok(())
     }
 
-    fn add_and_commit(&self, _root: &str, _message: &str) -> Result<(), Error> {
-        Ok(()) // no-op
+    fn add_and_commit(&self, _root: &str, _message: &str) -> Result<(), FakeError> {
+        Ok(())
     }
 }

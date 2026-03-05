@@ -126,12 +126,17 @@ fn collect_walk<T>(
 
 // ── FileEnv impl ─────────────────────────────────────────────────────────────
 
-impl<T> env_traits::FileEnv for FileTreeEnv<T>
+impl<T> embedded_io::ErrorType for FileTreeEnv<T>
 where
     T: AsRef<[u8]> + for<'a> From<&'a [u8]> + Send + Sync,
 {
     type Error = FileTreeError;
+}
 
+impl<T> env_traits::FileEnv for FileTreeEnv<T>
+where
+    T: AsRef<[u8]> + for<'a> From<&'a [u8]> + Send + Sync,
+{
     fn read_file(&self, path: &str) -> Result<Vec<u8>, FileTreeError> {
         let guard = self.root.read().unwrap();
         match get_node(&guard, path) {

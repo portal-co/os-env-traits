@@ -24,3 +24,16 @@ impl core::fmt::Display for FileTreeError {
         }
     }
 }
+
+impl core::error::Error for FileTreeError {}
+
+impl embedded_io::Error for FileTreeError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        match self {
+            FileTreeError::NotFound(_) => embedded_io::ErrorKind::NotFound,
+            FileTreeError::NotADirectory(_) | FileTreeError::NotAFile(_) => {
+                embedded_io::ErrorKind::InvalidInput
+            }
+        }
+    }
+}

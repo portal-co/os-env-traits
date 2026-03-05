@@ -13,6 +13,13 @@
 //! trait definitions remain usable in environments without a standard library.
 //! Concrete implementations in `env-real` and `env-fake` map these to
 //! `std::path::Path` internally as needed.
+//!
+//! # Error handling
+//!
+//! Every trait extends [`embedded_io::ErrorType`], which requires a single
+//! associated `Error` type satisfying [`embedded_io::Error`]
+//! (`core::error::Error + kind() -> ErrorKind`).  This lets generic code
+//! inspect errors uniformly without depending on `std`.
 
 extern crate alloc;
 
@@ -20,13 +27,12 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub use embedded_io::ErrorType;
+
 // ── FileEnv ──────────────────────────────────────────────────────────────────
 
 /// All local filesystem and environment-variable operations.
-pub trait FileEnv: Send + Sync {
-    /// The error type returned by fallible operations on this environment.
-    type Error: core::fmt::Debug + core::fmt::Display;
-
+pub trait FileEnv: ErrorType + Send + Sync {
     /// Read the full contents of a file.
     fn read_file(&self, path: &str) -> Result<Vec<u8>, Self::Error>;
 
@@ -60,10 +66,7 @@ pub trait FileEnv: Send + Sync {
 // ── GitEnv ───────────────────────────────────────────────────────────────────
 
 /// Pure-git operations (no GitHub API implied).
-pub trait GitEnv: Send + Sync {
-    /// The error type returned by fallible operations on this environment.
-    type Error: core::fmt::Debug + core::fmt::Display;
-
+pub trait GitEnv: ErrorType + Send + Sync {
     /// Return the absolute path to the repository root
     /// (`git rev-parse --show-toplevel`).
     fn repo_root(&self) -> Result<String, Self::Error>;
@@ -107,10 +110,7 @@ pub trait GitEnv: Send + Sync {
 // ── GitHubEnv ────────────────────────────────────────────────────────────────
 
 /// GitHub API / `gh` CLI operations.
-pub trait GitHubEnv: Send + Sync {
-    /// The error type returned by fallible operations on this environment.
-    type Error: core::fmt::Debug + core::fmt::Display;
-
+pub trait GitHubEnv: ErrorType + Send + Sync {
     /// Return the owner (org or user) login of the repository in the current
     /// working directory (`gh repo view --json owner --jq .owner.login`).
     fn current_owner(&self) -> Result<String, Self::Error>;
@@ -157,10 +157,7 @@ pub struct GitHubFile {
 ///
 /// Kept separate from `GitHubEnv` so that the AI scanner can use it without
 /// depending on any GitHub concepts.
-pub trait NetworkEnv: Send + Sync {
-    /// The error type returned by fallible operations on this environment.
-    type Error: core::fmt::Debug + core::fmt::Display;
-
+pub trait NetworkEnv: ErrorType + Send + Sync {
     /// POST `body` (JSON bytes) to `url` and return the response body.
     ///
     /// Non-2xx responses must be surfaced as `Err`.
@@ -178,10 +175,7 @@ pub trait NetworkEnv: Send + Sync {
 ///
 /// Wraps the whole scanning concern so that `check-ai-key` treats AI detection
 /// as a single swappable dependency rather than wiring `NetworkEnv` itself.
-pub trait AiEnv: Send + Sync {
-    /// The error type returned by fallible operations on this environment.
-    type Error: core::fmt::Debug + core::fmt::Display;
-
+pub trait AiEnv: ErrorType + Send + Sync {
     /// Inspect file content and return `(likely_ai, confidence)`.
     ///
     /// `confidence` is in `[0.0, 1.0]`.  An `Err` means the scan itself

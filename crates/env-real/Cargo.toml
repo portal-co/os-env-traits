@@ -7,9 +7,10 @@ repository.workspace = true
 description = "Real (production) implementations of env-traits: OsFileEnv, ProcessGitEnv, GhCliGitHubEnv, ReqwestNetworkEnv"
 
 [dependencies]
-env-traits = { workspace = true }
-anyhow     = { workspace = true }
-reqwest    = { workspace = true }
-serde      = { workspace = true }
-serde_json = { workspace = true }
-walkdir    = { workspace = true }
+env-traits  = { workspace = true }
+anyhow      = { workspace = true }
+embedded-io = { workspace = true }
+reqwest     = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+walkdir     = { workspace = true }

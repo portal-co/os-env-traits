@@ -5,12 +5,15 @@
 //! state they care about.  Missing entries return `Err` by default, making
 //! unintended calls loud.
 
+mod error;
+
 pub mod fake_file;
 pub mod fake_git;
 pub mod fake_github;
 pub mod fake_network;
 pub mod fake_ai;
 
+pub use error::FakeError;
 pub use fake_file::FakeFileEnv;
 pub use fake_git::FakeGitEnv;
 pub use fake_github::FakeGitHubEnv;

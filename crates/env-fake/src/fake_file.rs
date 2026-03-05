@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use env_traits::FileEnv;
+
+use crate::error::{fake_err, FakeError};
 
 /// In-memory filesystem + env-var store.
 #[derive(Clone, Default)]
@@ -28,19 +30,21 @@ impl FakeFileEnv {
     }
 }
 
-impl FileEnv for FakeFileEnv {
-    type Error = Error;
+impl embedded_io::ErrorType for FakeFileEnv {
+    type Error = FakeError;
+}
 
-    fn read_file(&self, path: &str) -> Result<Vec<u8>, Error> {
+impl FileEnv for FakeFileEnv {
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, FakeError> {
         self.files
             .lock()
             .unwrap()
             .get(path)
             .cloned()
-            .ok_or_else(|| anyhow!("FakeFileEnv: file not found: {path}"))
+            .ok_or_else(|| fake_err(anyhow!("FakeFileEnv: file not found: {path}")))
     }
 
-    fn write_file(&self, path: &str, contents: &[u8]) -> Result<(), Error> {
+    fn write_file(&self, path: &str, contents: &[u8]) -> Result<(), FakeError> {
         self.files
             .lock()
             .unwrap()
@@ -53,7 +57,6 @@ impl FileEnv for FakeFileEnv {
     }
 
     fn dir_exists(&self, path: &str) -> bool {
-        // A directory "exists" if any stored path has it as a prefix.
         let prefix = path.to_string();
         self.files
             .lock()
@@ -62,17 +65,16 @@ impl FileEnv for FakeFileEnv {
             .any(|k| k.starts_with(&prefix) && k != &prefix)
     }
 
-    fn create_dir_all(&self, _path: &str) -> Result<(), Error> {
-        // No-op: directories are implicit in the in-memory map.
+    fn create_dir_all(&self, _path: &str) -> Result<(), FakeError> {
         Ok(())
     }
 
     fn walk(
         &self,
         root: &str,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), Error>> + '_>, Error> {
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, bool), FakeError>> + '_>, FakeError> {
         let prefix = root.to_string();
-        let entries: Vec<Result<(String, bool), Error>> = self
+        let entries: Vec<Result<(String, bool), FakeError>> = self
             .files
             .lock()
             .unwrap()
