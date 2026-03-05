@@ -2,30 +2,47 @@
 
 use core::fmt::Write;
 #[cfg(feature = "std")]
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 use alloc::{collections::btree_map::BTreeMap, string::String};
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
+
 #[cfg(feature = "std")]
 impl<T> FileTree<T> {
-    pub fn read(&self, p: &str) -> std::io::Result<FileTree<Vec<u8>>> {
-        use std::format;
-
+    /// Read the tree from the filesystem using a [`FileEnv`] implementation.
+    ///
+    /// Each `FileTree::File` node is replaced by the bytes returned by
+    /// [`FileEnv::read_file`]; directory structure is preserved.  The path
+    /// `p` is the filesystem path that corresponds to the root of `self`.
+    ///
+    /// [`FileEnv`]: env_traits::FileEnv
+    pub fn read<E>(
+        &self,
+        p: &str,
+        env: &impl env_traits::FileEnv<Error = E>,
+    ) -> Result<FileTree<Vec<u8>>, E>
+    where
+        E: core::fmt::Debug + core::fmt::Display,
+    {
         Ok(match self {
-            FileTree::File { file } => FileTree::File {
-                file: std::fs::read(p)?,
+            FileTree::File { .. } => FileTree::File {
+                file: env.read_file(p)?,
             },
             FileTree::Dir { entries } => FileTree::Dir {
                 entries: entries
                     .iter()
-                    .map(|(a, b)| Ok((a.clone(), b.read(&format!("{p}/{a}"))?)))
-                    .collect::<Result<_, std::io::Error>>()?,
+                    .map(|(a, b)| {
+                        Ok((
+                            a.clone(),
+                            b.read(&alloc::format!("{p}/{a}"), env)?,
+                        ))
+                    })
+                    .collect::<Result<_, E>>()?,
             },
         })
     }
 }
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum FileTree<T> {
