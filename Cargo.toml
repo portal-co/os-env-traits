@@ -8,18 +8,19 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version     = "0.1.0"
-edition     = "2021"
-license     = "MPL-2.0"
-repository  = "https://github.com/portal-co/os-env-traits"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+repository = "https://github.com/portal-co/os-env-traits"
 
 [workspace.dependencies]
-anyhow     = "1"
-reqwest    = { version = "0.12", features = ["json", "blocking"] }
-serde      = { version = "1", features = ["derive"], default-features = false}
+anyhow = "1"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde = { version = "1", features = ["derive"], default-features = false }
 serde_json = "1"
-walkdir    = "2"
+walkdir = "2"
+embedded-io = { version = "0.7", default-features = false }
 env-traits = { path = "crates/env-traits" }
-env-fake   = { path = "crates/env-fake" }
-env-real   = { path = "crates/env-real" }
-ftree      = { path = "crates/ftree" }
+env-fake = { path = "crates/env-fake" }
+env-real = { path = "crates/env-real" }
+ftree = { path = "crates/ftree" }
