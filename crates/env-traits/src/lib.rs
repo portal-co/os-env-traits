@@ -29,6 +29,11 @@ use alloc::vec::Vec;
 
 pub use embedded_io::ErrorType;
 
+pub mod async_;
+pub use async_::{
+    AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv,
+};
+
 // ── FileEnv ──────────────────────────────────────────────────────────────────
 
 /// All local filesystem and environment-variable operations.
