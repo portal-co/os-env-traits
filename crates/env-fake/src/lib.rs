@@ -8,7 +8,7 @@ use std::{
 use anyhow::anyhow;
 use env_traits::{
     async_::{AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv},
-    AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv,
+    AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv, PullRequest,
 };
 use futures::{stream, Stream};
 
@@ -197,6 +197,10 @@ pub struct FakeGitEnv {
     show_files: Arc<Mutex<HashMap<(String, String), Vec<u8>>>>,
     changed_files: Arc<Mutex<Option<Vec<String>>>>,
     merge_bases: Arc<Mutex<HashMap<String, String>>>,
+    /// Branches created via `create_branch`, in call order.
+    pub created_branches: Arc<Mutex<Vec<String>>>,
+    /// `(remote, branch)` pairs pushed via `push`, in call order.
+    pub pushed_branches: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 impl FakeGitEnv {
@@ -304,6 +308,19 @@ impl GitEnv for FakeGitEnv {
     fn add_and_commit(&self, _root: &str, _message: &str) -> Result<(), FakeError> {
         Ok(())
     }
+
+    fn create_branch(&self, _root: &str, branch: &str) -> Result<(), FakeError> {
+        self.created_branches.lock().unwrap().push(branch.to_string());
+        Ok(())
+    }
+
+    fn push(&self, _root: &str, remote: &str, branch: &str) -> Result<(), FakeError> {
+        self.pushed_branches
+            .lock()
+            .unwrap()
+            .push((remote.to_string(), branch.to_string()));
+        Ok(())
+    }
 }
 
 impl AsyncGitEnv for FakeGitEnv {
@@ -365,6 +382,23 @@ impl AsyncGitEnv for FakeGitEnv {
         let r = GitEnv::add_and_commit(self, repo_root, message);
         async move { r }
     }
+    fn create_branch(
+        &self,
+        repo_root: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+        let r = GitEnv::create_branch(self, repo_root, branch);
+        async move { r }
+    }
+    fn push(
+        &self,
+        repo_root: &str,
+        remote: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<(), FakeError>> + Send {
+        let r = GitEnv::push(self, repo_root, remote, branch);
+        async move { r }
+    }
 }
 
 // ── FakeGitHubEnv ─────────────────────────────────────────────────────────────
@@ -375,6 +409,10 @@ pub struct FakeGitHubEnv {
     repos: Arc<Mutex<HashMap<String, Vec<String>>>>,
     contents: Arc<Mutex<HashMap<(String, String, String), Vec<GitHubFile>>>>,
     downloads: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    /// Auto-incrementing counter used to generate PR numbers.
+    pr_counter: Arc<Mutex<u64>>,
+    /// All PRs created via `create_pr`, in call order.
+    pub created_prs: Arc<Mutex<Vec<PullRequest>>>,
 }
 
 impl FakeGitHubEnv {
@@ -466,6 +504,26 @@ impl GitHubEnv for FakeGitHubEnv {
                 ))
             })
     }
+
+    fn create_pr(
+        &self,
+        _repo_root: &str,
+        title: &str,
+        _body: &str,
+        _head: &str,
+        _base: &str,
+    ) -> Result<PullRequest, FakeError> {
+        let mut counter = self.pr_counter.lock().unwrap();
+        *counter += 1;
+        let pr = PullRequest {
+            number: *counter,
+            url: format!("https://github.com/fake/repo/pull/{}", *counter),
+            title: title.to_string(),
+        };
+        drop(counter);
+        self.created_prs.lock().unwrap().push(pr.clone());
+        Ok(pr)
+    }
 }
 
 impl AsyncGitHubEnv for FakeGitHubEnv {
@@ -497,6 +555,17 @@ impl AsyncGitHubEnv for FakeGitHubEnv {
         download_url: &str,
     ) -> impl core::future::Future<Output = Result<Vec<u8>, FakeError>> + Send {
         let r = GitHubEnv::download_file(self, download_url);
+        async move { r }
+    }
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> impl core::future::Future<Output = Result<PullRequest, FakeError>> + Send {
+        let r = GitHubEnv::create_pr(self, repo_root, title, body, head, base);
         async move { r }
     }
 }

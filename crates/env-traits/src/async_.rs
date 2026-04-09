@@ -126,6 +126,21 @@ pub trait AsyncGitEnv: ErrorType + Send + Sync {
         repo_root: &str,
         message: &str,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+
+    /// Create a new branch and switch to it (`git checkout -b <branch>`).
+    fn create_branch(
+        &self,
+        repo_root: &str,
+        branch: &str,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+
+    /// Push a local branch to a remote (`git push <remote> <branch>`).
+    fn push(
+        &self,
+        repo_root: &str,
+        remote: &str,
+        branch: &str,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
 // ── AsyncGitHubEnv ───────────────────────────────────────────────────────────
@@ -156,6 +171,18 @@ pub trait AsyncGitHubEnv: ErrorType + Send + Sync {
         &self,
         download_url: &str,
     ) -> impl Future<Output = Result<Vec<u8>, Self::Error>> + Send;
+
+    /// Create a pull request on GitHub and return its metadata.
+    ///
+    /// Runs `gh pr create` from within `repo_root`.
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> impl Future<Output = Result<crate::PullRequest, Self::Error>> + Send;
 }
 
 // ── AsyncNetworkEnv ──────────────────────────────────────────────────────────

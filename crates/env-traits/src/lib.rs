@@ -121,6 +121,14 @@ pub trait GitEnv: ErrorType + Send + Sync {
     /// Stage all changes and create a commit with `message`
     /// (`git add -A && git commit -m <message>`).
     fn add_and_commit(&self, repo_root: &str, message: &str) -> Result<(), Self::Error>;
+
+    /// Create a new branch and switch to it
+    /// (`git checkout -b <branch>`).
+    fn create_branch(&self, repo_root: &str, branch: &str) -> Result<(), Self::Error>;
+
+    /// Push a local branch to a remote
+    /// (`git push <remote> <branch>`).
+    fn push(&self, repo_root: &str, remote: &str, branch: &str) -> Result<(), Self::Error>;
 }
 
 // ── GitHubEnv ────────────────────────────────────────────────────────────────
@@ -154,6 +162,30 @@ pub trait GitHubEnv: ErrorType + Send + Sync {
     /// through the `gh` CLI in restricted environments.  Fakes return
     /// pre-seeded content keyed by path, not by arbitrary URL.
     fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Self::Error>;
+
+    /// Create a pull request on GitHub and return its metadata.
+    ///
+    /// Runs `gh pr create --title <title> --body <body> --head <head>
+    /// --base <base>` from within `repo_root`.
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> Result<PullRequest, Self::Error>;
+}
+
+/// A pull request returned after creation via the GitHub API / `gh` CLI.
+#[derive(Debug, Clone)]
+pub struct PullRequest {
+    /// The PR number within the repository.
+    pub number: u64,
+    /// The canonical HTML URL of the PR.
+    pub url: String,
+    /// The PR title as stored on GitHub.
+    pub title: String,
 }
 
 /// A file (or directory entry) returned by the GitHub Contents API.
@@ -259,6 +291,12 @@ impl<T: GitEnv + ?Sized> GitEnv for Box<T> {
     fn add_and_commit(&self, repo_root: &str, message: &str) -> Result<(), Self::Error> {
         (**self).add_and_commit(repo_root, message)
     }
+    fn create_branch(&self, repo_root: &str, branch: &str) -> Result<(), Self::Error> {
+        (**self).create_branch(repo_root, branch)
+    }
+    fn push(&self, repo_root: &str, remote: &str, branch: &str) -> Result<(), Self::Error> {
+        (**self).push(repo_root, remote, branch)
+    }
 }
 
 impl<T: GitHubEnv + ?Sized> GitHubEnv for Box<T> {
@@ -273,6 +311,16 @@ impl<T: GitHubEnv + ?Sized> GitHubEnv for Box<T> {
     }
     fn download_file(&self, download_url: &str) -> Result<Vec<u8>, Self::Error> {
         (**self).download_file(download_url)
+    }
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> Result<PullRequest, Self::Error> {
+        (**self).create_pr(repo_root, title, body, head, base)
     }
 }
 

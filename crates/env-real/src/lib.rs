@@ -6,7 +6,7 @@ use std::{fmt, fs, path::Path, process::Command};
 use anyhow::{anyhow, Context};
 use env_traits::{
     async_::{AsyncAiEnv, AsyncFileEnv, AsyncGitEnv, AsyncGitHubEnv, AsyncNetworkEnv},
-    AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv,
+    AiEnv, FileEnv, GitEnv, GitHubEnv, GitHubFile, NetworkEnv, PullRequest,
 };
 use futures::{stream, Stream};
 use serde::Deserialize;
@@ -272,6 +272,16 @@ impl GitEnv for ProcessGitEnv {
         self.run(repo_root, &["commit", "-m", message])?;
         Ok(())
     }
+
+    fn create_branch(&self, repo_root: &str, branch: &str) -> Result<(), RealError> {
+        self.run(repo_root, &["checkout", "-b", branch])?;
+        Ok(())
+    }
+
+    fn push(&self, repo_root: &str, remote: &str, branch: &str) -> Result<(), RealError> {
+        self.run(repo_root, &["push", remote, branch])?;
+        Ok(())
+    }
 }
 
 impl AsyncGitEnv for ProcessGitEnv {
@@ -333,6 +343,23 @@ impl AsyncGitEnv for ProcessGitEnv {
         let r = GitEnv::add_and_commit(self, repo_root, message);
         async move { r }
     }
+    fn create_branch(
+        &self,
+        repo_root: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+        let r = GitEnv::create_branch(self, repo_root, branch);
+        async move { r }
+    }
+    fn push(
+        &self,
+        repo_root: &str,
+        remote: &str,
+        branch: &str,
+    ) -> impl core::future::Future<Output = Result<(), RealError>> + Send {
+        let r = GitEnv::push(self, repo_root, remote, branch);
+        async move { r }
+    }
 }
 
 // ── GhCliGitHubEnv ────────────────────────────────────────────────────────────
@@ -365,6 +392,25 @@ impl GhCliGitHubEnv {
         } else {
             Err(real_err(anyhow!(
                 "gh {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )))
+        }
+    }
+
+    /// Run `gh` with `args` from within `dir`.
+    fn gh_in(&self, dir: &str, args: &[&str]) -> Result<Vec<u8>, RealError> {
+        let output = Command::new("gh")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .with_context(|| format!("gh {} (in {dir})", args.join(" ")))
+            .map_err(real_err)?;
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(real_err(anyhow!(
+                "gh {} failed (in {dir}): {}",
                 args.join(" "),
                 String::from_utf8_lossy(&output.stderr).trim()
             )))
@@ -427,6 +473,41 @@ impl GitHubEnv for GhCliGitHubEnv {
     fn download_file(&self, download_url: &str) -> Result<Vec<u8>, RealError> {
         self.gh(&["api", download_url])
     }
+
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> Result<PullRequest, RealError> {
+        let raw = self.gh_in(
+            repo_root,
+            &[
+                "pr", "create",
+                "--title", title,
+                "--body", body,
+                "--head", head,
+                "--base", base,
+                "--json", "number,url,title",
+            ],
+        )?;
+        #[derive(serde::Deserialize)]
+        struct GhPrOutput {
+            number: u64,
+            url: String,
+            title: String,
+        }
+        let out: GhPrOutput = serde_json::from_slice(&raw)
+            .with_context(|| format!("create_pr: parse JSON for {head} -> {base}"))
+            .map_err(real_err)?;
+        Ok(PullRequest {
+            number: out.number,
+            url: out.url,
+            title: out.title,
+        })
+    }
 }
 
 impl AsyncGitHubEnv for GhCliGitHubEnv {
@@ -458,6 +539,17 @@ impl AsyncGitHubEnv for GhCliGitHubEnv {
         download_url: &str,
     ) -> impl core::future::Future<Output = Result<Vec<u8>, RealError>> + Send {
         let r = GitHubEnv::download_file(self, download_url);
+        async move { r }
+    }
+    fn create_pr(
+        &self,
+        repo_root: &str,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> impl core::future::Future<Output = Result<PullRequest, RealError>> + Send {
+        let r = GitHubEnv::create_pr(self, repo_root, title, body, head, base);
         async move { r }
     }
 }
