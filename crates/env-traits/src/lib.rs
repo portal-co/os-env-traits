@@ -40,6 +40,9 @@ pub use copy_ext::{
     FileEnvCopyToAsyncExt,
 };
 
+pub mod public_filter;
+pub use public_filter::{AsyncPublicFileEnv, PublicFileEnv};
+
 #[cfg(feature = "awaiter")]
 pub mod awaiter_bridge;
 #[cfg(feature = "awaiter")]
